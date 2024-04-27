@@ -1,0 +1,75 @@
+name: Build APK TEST
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # to be able to publish a GitHub release
+      issues: write # to be able to comment on released issues
+      pull-requests: write # to be able to comment on released pull requests
+      id-token: write # to enable use of OIDC
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_TOKEN: ${{ secrets.MY_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Prepare
+        run: |
+          sudo apt-get -y install dos2unix apksigner
+
+      - name: Setup Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '^1.20.5'
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'oracle'
+          java-version: '20'
+
+      - name: Setup Gradles
+        uses: gradle/gradle-build-action@v3
+
+      - name: Clone
+        run: |
+          git clone https://Blawuken:$GH_TOKEN@github.com/Blawuken/Nekosing-Box
+
+      - name: Execute Gradle build
+        id: build_apk
+        run: |
+         cd ${{ github.workspace }}/Nekosing-Box
+         dos2unix ./gradlew
+         chmod 0755 ./gradlew
+         ./gradlew assembleRelease
+
+      - name: Sign APK
+        run: |
+          cd ${{ github.workspace }}/Nekosing-Box
+          apksigner sign --key platform.pk8 --cert platform.x509.pem app/build/outputs/apk/other/release/*arm64-v8a.apk
+          apksigner sign --key platform.pk8 --cert platform.x509.pem app/build/outputs/apk/other/release/*armeabi-v7a.apk
+
+      - name: Upload APK arm64
+        uses: actions/upload-artifact@v4
+        with:
+          name: singbox-arm64
+          path: |
+            ${{ github.workspace }}/Nekosing-Box/app/build/outputs/apk/other/release/*arm64-v8a.apk
+
+      - name: Upload APK arm32
+        uses: actions/upload-artifact@v4
+        with:
+          name: singbox-arm
+          path: |
+            ${{ github.workspace }}/Nekosing-Box/app/build/outputs/apk/other/release/*armeabi-v7a.apk

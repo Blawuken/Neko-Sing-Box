@@ -1,0 +1,61 @@
+name: Building dependencies
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # to be able to publish a GitHub release
+      issues: write # to be able to comment on released issues
+      pull-requests: write # to be able to comment on released pull requests
+      id-token: write # to enable use of OIDC
+    env:
+      GH_TOKEN: ${{ secrets.MY_TOKEN }}
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Prepare
+      run: |
+        sudo apt-get -y install dos2unix
+
+    - name: Setup Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '^1.20.5'
+
+    - name: Setup Java
+      uses: actions/setup-java@v4
+      with:
+        distribution: 'oracle'
+        java-version: '20'
+
+    - name: Setup Gradles
+      uses: gradle/gradle-build-action@v3
+
+    - name: Build Libbox
+      id: build_libbox
+      run: |
+        git clone https://Blawuken:$GH_TOKEN@github.com/Blawuken/Nekosing-Box
+        cd ${{ github.workspace }}/Nekosing-Box
+        chmod 0755 build_libbox.sh
+        dos2unix ./build_libbox.sh
+        ./build_libbox.sh
+        cp sing-box/libbox.aar ${{ github.workspace }}/Nekosing-Box/app/libs/ || exit 1
+
+    - name: Update library
+      run: |
+        cd ${{ github.workspace }}/Nekosing-Box
+        git config --global user.email jarbull87@gmail.com
+        git config --global user.name Blawuken
+        rel_date="$(date "+%Y%m%d")" # ISO 8601 format
+        git add ${{ github.workspace }}/v2rayNG/app/libs/libv2ray.aar
+        git commit -m "Core: Bump to $rel_date build"
+        git push
